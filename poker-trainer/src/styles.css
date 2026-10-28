@@ -1520,16 +1520,35 @@ legend {
   color: var(--brass-ink);
   background: var(--brass);
 }
+.current-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 .previous {
+  border-top: 2px solid var(--line);
+  padding-top: 8px;
+}
+.previous summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.prev-verdicts {
+  display: flex;
+  gap: 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.previous[open] {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 2px solid var(--line);
-  opacity: 0.85;
-}
-.previous .feed-hand {
-  display: flex;
-  justify-content: space-between;
 }

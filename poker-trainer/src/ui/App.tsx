@@ -378,6 +378,20 @@ export function App() {
     };
   }, [session, decisions, game?.id]);
 
+  // New hand on a small screen: bring the table back into view instead of making the player scroll up.
+  const firstHand = useRef(true);
+  useEffect(() => {
+    if (firstHand.current) {
+      firstHand.current = false;
+      return;
+    }
+    const table = document.querySelector('.table-wrap');
+    if (table && table.getBoundingClientRect().top < 0) {
+      const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+    }
+  }, [handNumber]);
+
   const previous = useMemo(() => {
     const done = hands.filter((h) => h.id !== game?.id);
     return done.length > sessionStart ? done[done.length - 1] : null;

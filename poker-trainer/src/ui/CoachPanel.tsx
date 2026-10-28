@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { HandRecord, HeroDecision } from '../types';
 import { gradeOf } from '../types';
 import { renderMarkdown } from './markdown';
@@ -95,6 +96,21 @@ function DecisionCard({ d, onRetry }: { d: HeroDecision; onRetry: () => void }) 
 
 export function CoachPanel({ handNumber, decisions, scorecard, result, previous, tally, onRetry }: Props) {
   const pct = tally.decisions ? Math.round((100 * tally.correct) / tally.decisions) : 0;
+  const feedRef = useRef<HTMLDivElement>(null);
+
+  // New hand: start the feed clean at the top.
+  useEffect(() => {
+    if (feedRef.current) feedRef.current.scrollTop = 0;
+  }, [handNumber]);
+
+  // New decision or scorecard in this hand: keep the latest note in view (desktop, where the feed scrolls).
+  useEffect(() => {
+    const el = feedRef.current?.querySelector('.current-hand')?.lastElementChild as HTMLElement | null;
+    const feed = feedRef.current;
+    if (!el || !feed || feed.scrollHeight <= feed.clientHeight) return;
+    feed.scrollTop = Math.max(0, el.offsetTop - feed.offsetTop - 8);
+  }, [decisions.length, result !== null]);
+
   return (
     <aside className="coach" aria-label="Coach">
       <header className="coach-head">
@@ -111,7 +127,8 @@ export function CoachPanel({ handNumber, decisions, scorecard, result, previous,
           </span>
         </div>
       </header>
-      <div className="coach-feed">
+      <div className="coach-feed" ref={feedRef}>
+        <div className="current-hand">
         <p className="feed-hand">Hand #{handNumber}</p>
         {decisions.length === 0 ? <p className="muted">Your decisions and the coach's notes for this hand appear here.</p> : null}
         {decisions.map((d, i) => (
@@ -127,16 +144,29 @@ export function CoachPanel({ handNumber, decisions, scorecard, result, previous,
             {scorecard.text ? <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(scorecard.text) }} /> : null}
           </article>
         ) : null}
+        </div>
         {previous && previous.heroDecisions.length ? (
-          <section className="previous">
-            <p className="feed-hand">
-              Previous hand #{previous.number} <span className={previous.result >= 0 ? 'pos' : 'neg'}>{signed(previous.result)}</span>
-            </p>
+          <details className="previous">
+            <summary>
+              <span>
+                Previous hand #{previous.number} <span className={previous.result >= 0 ? 'pos' : 'neg'}>{signed(previous.result)}</span>
+              </span>
+              <span className="prev-verdicts">
+                {previous.heroDecisions.map((d, i) => {
+                  const g = gradeOf(d);
+                  return g ? (
+                    <span key={i} className={`badge v-${g.action_verdict}`} title={`${STREET[d.street]}: ${d.actionText}`}>
+                      {d.actionText.split(' ')[0]}
+                    </span>
+                  ) : null;
+                })}
+              </span>
+            </summary>
             {previous.heroDecisions.map((d, i) => (
               <DecisionCard key={i} d={d} onRetry={() => onRetry(previous.id, i)} />
             ))}
             {previous.scorecard ? <div className="md scorecard" dangerouslySetInnerHTML={{ __html: renderMarkdown(previous.scorecard) }} /> : null}
-          </section>
+          </details>
         ) : null}
       </div>
     </aside>

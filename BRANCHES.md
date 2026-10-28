@@ -14,7 +14,7 @@ Qué es cada rama, en qué estado está y cómo trabajamos. **Este archivo se ac
 | Rama | Para qué es | Estado | Último commit |
 |---|---|---|---|
 | [`master`](https://github.com/GabDevOps/gabrepo/tree/master) | Web original: `index.html`, `landing.html`, `aboutus.html`, `Mission.html`, `gay.html`. Todavía sin Poker Trainer. | Estable | `b188688` |
-| [`claude/poker-trainer`](https://github.com/GabDevOps/gabrepo/tree/claude/poker-trainer) | Poker Trainer (carpeta `poker-trainer/`): entrenador de Hold'em 6-max con coach IA, ejecutable como Artifact de claude.ai. | **En pruebas (v2)**. Pendiente de PR a `master`. | ver historial |
+| [`claude/poker-trainer`](https://github.com/GabDevOps/gabrepo/tree/claude/poker-trainer) | Poker Trainer (carpeta `poker-trainer/`): entrenador de Hold'em 6-max con coach IA, ejecutable como Artifact de claude.ai. | **En pruebas (v2.1)**. Pendiente de PR a `master`. | ver historial |
 
 ## Historial de `claude/poker-trainer`
 
@@ -23,13 +23,14 @@ Qué es cada rama, en qué estado está y cómo trabajamos. **Este archivo se ac
 | `cadb621` | 2026-10-28 | v1 de la app completa. | Tests automáticos OK. Probado en navegador fuera de claude.ai. |
 | `bdeee80` | 2026-10-28 | `poker-trainer/PLAN.md` con el plan de la app. | Solo documentación. |
 | `530e52e` | 2026-10-28 | v2: razonamiento opcional, la mesa no espera al coach, reparto automático tras un fold, manos interesantes, corrección instantánea ("quick check"), coach más rápido. | Tests automáticos OK (28). Probado en navegador. **Pendiente de prueba de Gabriel en claude.ai.** |
-| (este commit) | 2026-10-28 | `BRANCHES.md` (este archivo). | Solo documentación. |
+| `2ddaa62` | 2026-10-28 | `BRANCHES.md` (este archivo). | Solo documentación. |
+| (este commit) | 2026-10-28 | v2.1: el panel del coach empieza limpio en cada mano (vuelve arriba; la mano anterior queda plegada en una línea con sus veredictos) y en móvil la página vuelve a la mesa al repartir. | Tests automáticos OK (28). Probado en navegador (escritorio y móvil). **Pendiente de prueba de Gabriel en claude.ai.** |
 
 ## Dónde se prueba
 
-- **Artifact:** https://claude.ai/artifact/UhYSBet95KAcunZyNmUWUJ (privado). Ahora mismo muestra la **v2** (commit `530e52e`).
+- **Artifact:** https://claude.ai/artifact/UhYSBet95KAcunZyNmUWUJ (privado). Ahora mismo muestra la **v2.1** (último commit de esta rama).
 - Para regenerarlo desde el código: en `poker-trainer/`, `npm install` y `npm run build`; se publica `dist/poker-trainer.html` en la misma URL.
 
 ## Siguiente paso
 
-Cuando Gabriel confirme que la v2 funciona en claude.ai: abrir un Pull Request `claude/poker-trainer` → `master`.
+Cuando Gabriel confirme que la v2.1 funciona en claude.ai: abrir un Pull Request `claude/poker-trainer` → `master`.
