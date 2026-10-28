@@ -2,7 +2,8 @@ import type { Action, BotStyle, Position, Street } from './engine/table';
 import type { Card } from './engine/cards';
 
 export type ActionVerdict = 'correct' | 'acceptable' | 'wrong';
-export type ReasoningVerdict = 'correct' | 'partly' | 'off';
+/** 'none' = the student gave no reasoning (only the action is graded). */
+export type ReasoningVerdict = 'correct' | 'partly' | 'off' | 'none';
 
 export type CoachNumbers = {
   price_pct?: number | null;
@@ -19,6 +20,8 @@ export type CoachReply = {
   explanation: string;
   numbers?: CoachNumbers | null;
   leaks: string[];
+  /** 'quick' = instant rule-based check in the browser; 'coach' = Claude. */
+  source?: 'quick' | 'coach';
 };
 
 export type HeroDecision = {
@@ -30,6 +33,9 @@ export type HeroDecision = {
   actionText: string;
   /** Hand-state JSON sent to the coach (kept so an unavailable coach can be re-asked later). */
   handState: string;
+  /** Instant rule-based grade, available the moment the action is taken. */
+  quick: CoachReply;
+  /** Claude's grade; replaces the quick check on the card when it arrives. */
   coach: CoachReply | null;
   /** 'pending' while waiting, 'unavailable' when the coach could not be reached. */
   coachStatus: 'pending' | 'done' | 'unavailable';
@@ -92,8 +98,8 @@ export type Settings = {
   startStack: number;
   resetStacks: boolean;
   fourColor: boolean;
-  requireReasoning: boolean;
-  waitForCoach: boolean;
+  /** Skip hands with no real decision (walks, obvious folds). */
+  interestingOnly: boolean;
   reviewEvery: number;
   showHint: boolean;
   currency: string;
@@ -105,9 +111,11 @@ export const defaultSettings: Settings = {
   startStack: 500,
   resetStacks: true,
   fourColor: true,
-  requireReasoning: true,
-  waitForCoach: true,
+  interestingOnly: true,
   reviewEvery: 10,
   showHint: false,
   currency: '€',
 };
+
+/** The grade that counts for a decision: Claude's when present, else the instant check. */
+export const gradeOf = (d: HeroDecision): CoachReply | null => d.coach ?? d.quick ?? null;

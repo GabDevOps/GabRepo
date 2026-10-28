@@ -29,7 +29,7 @@ export function SettingsPanel({ settings, storeKind, canDownload, onChange, onCl
       />
     </label>
   );
-  const toggle = (k: 'resetStacks' | 'fourColor' | 'requireReasoning' | 'waitForCoach' | 'showHint', label: string) => (
+  const toggle = (k: 'resetStacks' | 'fourColor' | 'interestingOnly' | 'showHint', label: string) => (
     <label className="toggle" htmlFor={`set-${k}`}>
       <input id={`set-${k}`} type="checkbox" checked={settings[k]} onChange={(e) => set(k, e.target.checked)} />
       <span>{label}</span>
@@ -59,8 +59,7 @@ export function SettingsPanel({ settings, storeKind, canDownload, onChange, onCl
           </fieldset>
           <fieldset>
             <legend>Training</legend>
-            {toggle('requireReasoning', 'Require reasoning before acting')}
-            {toggle('waitForCoach', 'Wait for the coach before continuing')}
+            {toggle('interestingOnly', 'Interesting hands only (skip obvious folds and walks)')}
             {toggle('showHint', 'Show hint on the chart')}
             {toggle('fourColor', 'Four-colour deck')}
             <label className="field" htmlFor="set-review">

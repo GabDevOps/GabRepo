@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { act, GameState, heroNet, newHand, PlayerInput } from '../engine/table';
+import { act, GameState, heroNet, PlayerInput } from '../engine/table';
+import { dealHand } from '../engine/dealer';
 import { setCurrency, fmt } from '../engine/money';
 import { heroActionText, logLines, situationLine } from '../engine/describe';
 import { cardPretty } from '../engine/cards';
-import { decide, randomStyles } from '../bots/bot';
+import { decide } from '../bots/bot';
 import { handLabel } from '../strategy/ranges';
 import { recommend, situationFromState } from '../strategy/preflopAdvisor';
 import { decisionPrompt, handStateJson, reviewPrompt, scorecardPrompt } from '../coach/prompt';
 import { askDecision, askMarkdown, getSample } from '../coach/client';
+import { quickCheck } from '../coach/quickCheck';
 import { HistoryStore, loadSettings, localStore, openStore, saveFile, saveSettings } from '../store/persistence';
-import { addHand, addLateReply } from '../store/stats';
+import { addHand, replaceGrade } from '../store/stats';
 import { handsToText } from '../store/history';
-import { emptyStats, HandRecord, HeroDecision, Settings, Stats } from '../types';
+import { emptyStats, gradeOf, HandRecord, HeroDecision, Settings, Stats } from '../types';
 import { Table } from './Table';
 import { ActionPanel } from './ActionPanel';
 import { CoachPanel } from './CoachPanel';
@@ -22,6 +24,8 @@ import { ReviewModal } from './ReviewModal';
 
 const BOT_DELAY = 550;
 const STREET_DELAY = 900;
+/** Pause after a hero fold before the next hand is dealt automatically. */
+const AUTO_DEAL_DELAY = 1200;
 
 type Scorecard = { status: 'idle' | 'loading' | 'done' | 'unavailable'; text: string };
 type ReviewState = { status: 'loading' | 'done' | 'unavailable'; text: string; afterHand: number };
@@ -42,7 +46,6 @@ export function App() {
   const [dealtFrom, setDealtFrom] = useState(0);
   const [handNumber, setHandNumber] = useState(1);
   const [decisions, setDecisionsState] = useState<HeroDecision[]>([]);
-  const [busy, setBusy] = useState(false);
   const [ended, setEnded] = useState<{ result: number; shown: Set<number>; heroFolded: boolean } | null>(null);
   const [scorecard, setScorecard] = useState<Scorecard>({ status: 'idle', text: '' });
   const [chartOpen, setChartOpen] = useState(false);
@@ -61,6 +64,10 @@ export function App() {
   const storeRef = useRef<HistoryStore | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const gameRef = useRef<GameState | null>(null);
+  gameRef.current = game;
+  /** Pre-computed bot moves up to the hero's first decision (see dealHand). */
+  const scriptRef = useRef<PlayerInput[]>([]);
 
   const setHands = (h: HandRecord[]) => {
     handsRef.current = h;
@@ -109,23 +116,26 @@ export function App() {
   const startHand = useCallback((number?: number) => {
     const s = settingsRef.current;
     const n = number ?? statsRef.current.hands + 1;
+    const prevGame = gameRef.current;
     let heroStack = s.startStack;
-    if (!s.resetStacks && game) {
-      const prev = game.players[game.heroSeat].stack;
+    if (!s.resetStacks && prevGame) {
+      const prev = prevGame.players[prevGame.heroSeat].stack;
       heroStack = prev >= s.bb ? prev : s.startStack;
     }
     const stacks = Array(6).fill(s.startStack);
     stacks[0] = heroStack;
     const id = Date.now();
     handIdRef.current = id;
-    const g = newHand({ id, sb: s.sb, bb: s.bb, stacks, heroSeat: 0, styles: randomStyles(5) });
+    const deal = dealHand({ id, sb: s.sb, bb: s.bb, stacks, heroSeat: 0, interesting: s.interestingOnly });
+    const g = deal.state;
+    scriptRef.current = deal.script;
     setHandNumber(n);
     setDecisions([]);
     setEnded(null);
     setScorecard({ status: 'idle', text: '' });
     setDealtFrom(0);
     setGameState(g);
-  }, [game]);
+  }, []);
 
   const updateGame = (next: GameState) => {
     setGameState((prev) => {
@@ -136,12 +146,15 @@ export function App() {
 
   // Bots act on their own, one at a time.
   useEffect(() => {
-    if (!game || game.handOver || busy || ended) return;
+    if (!game || game.handOver || ended) return;
     if (game.toAct === game.heroSeat) return;
     const newStreet = game.actions.length > 0 && game.actions[game.actions.length - 1].street !== game.street;
-    const t = setTimeout(() => updateGame(act(game, decide(game, game.toAct!))), newStreet ? STREET_DELAY : BOT_DELAY);
+    const t = setTimeout(() => {
+      const input = scriptRef.current.shift() ?? decide(game, game.toAct!);
+      updateGame(act(game, input));
+    }, newStreet ? STREET_DELAY : BOT_DELAY);
     return () => clearTimeout(t);
-  }, [game, busy, ended]);
+  }, [game, ended]);
 
   // Hand finished in the engine.
   useEffect(() => {
@@ -158,17 +171,26 @@ export function App() {
     }
     const rec = handsRef.current.find((h) => h.id === handId);
     if (rec && rec.heroDecisions[idx]) {
-      const wasDone = rec.heroDecisions[idx].coachStatus === 'done';
+      const before = rec.heroDecisions[idx];
       const updated: HandRecord = { ...rec, heroDecisions: rec.heroDecisions.map((x, i) => (i === idx ? { ...x, ...patch } : x)) };
       setHands(handsRef.current.map((h) => (h.id === handId ? updated : h)));
       storeRef.current?.saveHand(updated).catch(() => undefined);
-      if (patch.coach && !wasDone) setStats(addLateReply(statsRef.current, patch.coach.action_verdict, patch.coach.leaks));
+      if (patch.coach) setStats(replaceGrade(statsRef.current, gradeOf(before), patch.coach));
     }
   };
 
   const askCoach = (handId: number, idx: number, d: HeroDecision) => {
     const s = settingsRef.current;
-    const prompt = decisionPrompt({ sb: s.sb, bb: s.bb, stackBB: Math.round(s.startStack / s.bb), handState: d.handState, reasoning: d.reasoning, actionText: d.actionText });
+    const prompt = decisionPrompt({
+      sb: s.sb,
+      bb: s.bb,
+      stackBB: Math.round(s.startStack / s.bb),
+      street: d.street,
+      handState: d.handState,
+      reasoning: d.reasoning,
+      actionText: d.actionText,
+      quick: d.quick,
+    });
     patchDecision(handId, idx, { coachStatus: 'pending', coachError: undefined });
     const p = askDecision(prompt).then(
       (reply) => {
@@ -183,8 +205,8 @@ export function App() {
     return p;
   };
 
-  const onHeroAction = async (input: PlayerInput, reasoning: string) => {
-    if (!game || busy) return;
+  const onHeroAction = (input: PlayerInput, reasoning: string) => {
+    if (!game) return;
     const before = game;
     let next: GameState;
     try {
@@ -201,28 +223,27 @@ export function App() {
       action,
       actionText: heroActionText(action),
       handState: handStateJson(before, handNumber),
+      quick: quickCheck(before, action),
       coach: null,
       coachStatus: 'pending',
     };
     const handId = before.id;
     const idx = decisionsRef.current.length;
     setDecisions([...decisionsRef.current, decision]);
-    const p = askCoach(handId, idx, decision);
+    // Claude's comment arrives in the background; the table never waits for it.
+    void askCoach(handId, idx, decision);
 
-    const heroFolded = input.type === 'fold';
-    if (heroFolded) {
-      // The hand is over for the hero; finish it silently (villain cards stay hidden).
+    if (input.type === 'fold') {
+      // The hand is over for the hero: finish it silently (villain cards stay hidden) and deal the next one.
       let s = next;
       while (!s.handOver) s = act(s, decide(s, s.toAct!));
-      next = s;
+      finalize(s, true);
+      updateGame(s);
+      setTimeout(() => {
+        if (handIdRef.current === handId) startHand();
+      }, AUTO_DEAL_DELAY);
+      return;
     }
-    if (settingsRef.current.waitForCoach) {
-      setBusy(true);
-      await p;
-      setBusy(false);
-    }
-    if (handIdRef.current !== handId) return;
-    if (heroFolded) finalize(next, true);
     updateGame(next);
   };
 
@@ -255,7 +276,9 @@ export function App() {
     const newStats = addHand(statsRef.current, record);
     setStats(newStats);
 
-    if (record.heroDecisions.length) void writeScorecard(record.id);
+    // A scorecard is worth it once the hero played past a single preflop decision.
+    const playedOn = record.heroDecisions.length > 1 || record.heroDecisions.some((d) => d.street !== 'preflop');
+    if (playedOn) void writeScorecard(record.id);
     const every = settingsRef.current.reviewEvery;
     if (newStats.hands > 0 && newStats.hands % every === 0) void runReview(true, record.id);
   };
@@ -350,10 +373,15 @@ export function App() {
     const ds = [...session.filter((h) => h.id !== game?.id).flatMap((h) => h.heroDecisions), ...decisions];
     return {
       decisions: ds.length,
-      correct: ds.filter((d) => d.coach?.action_verdict === 'correct').length,
+      correct: ds.filter((d) => gradeOf(d)?.action_verdict === 'correct').length,
       net: session.reduce((t, h) => t + h.result, 0),
     };
   }, [session, decisions, game?.id]);
+
+  const previous = useMemo(() => {
+    const done = hands.filter((h) => h.id !== game?.id);
+    return done.length > sessionStart ? done[done.length - 1] : null;
+  }, [hands, game?.id, sessionStart]);
 
   const highlight = useMemo(() => {
     if (!settings.showHint || !game || mode !== 'play') return null;
@@ -442,13 +470,13 @@ export function App() {
                 <div className="loading">Shuffling up and dealing…</div>
               )}
               {game && heroTurn ? (
-                <ActionPanel game={game} requireReasoning={settings.requireReasoning} busy={busy} onSubmit={onHeroAction} />
+                <ActionPanel game={game} onSubmit={onHeroAction} />
               ) : null}
-              {busy ? <p className="waiting">Waiting for the coach before continuing…</p> : null}
-              {game && ended ? (
+              {game && ended && ended.heroFolded ? <p className="waiting">You folded. Dealing the next hand…</p> : null}
+              {game && ended && !ended.heroFolded ? (
                 <div className="hand-end">
                   <p>
-                    {ended.heroFolded ? 'You folded.' : 'Hand complete.'}{' '}
+                    Hand complete.{' '}
                     <b className={ended.result >= 0 ? 'pos' : 'neg'}>
                       {ended.result >= 0 ? '+' : ''}
                       {fmt(ended.result)}
@@ -459,7 +487,7 @@ export function App() {
                   </button>
                 </div>
               ) : null}
-              {game && !heroTurn && !ended && !busy ? <p className="waiting">Villains are acting…</p> : null}
+              {game && !heroTurn && !ended ? <p className="waiting">Villains are acting…</p> : null}
               <details className="log">
                 <summary>Hand history</summary>
                 <pre>{log.join('\n')}</pre>
@@ -469,9 +497,16 @@ export function App() {
               handNumber={handNumber}
               decisions={decisions}
               scorecard={scorecard}
-              result={ended ? ended.result : null}
+              result={ended && !ended.heroFolded ? ended.result : null}
+              previous={previous}
               tally={tally}
-              onRetry={(i) => askCoach(handIdRef.current, i, decisionsRef.current[i])}
+              onRetry={(handId, i) => {
+                if (handId === null) askCoach(handIdRef.current, i, decisionsRef.current[i]);
+                else {
+                  const rec = handsRef.current.find((h) => h.id === handId);
+                  if (rec) askCoach(handId, i, rec.heroDecisions[i]);
+                }
+              }}
             />
           </>
         )}

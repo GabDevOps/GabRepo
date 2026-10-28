@@ -6,12 +6,10 @@ import { situationLine } from '../engine/describe';
 
 type Props = {
   game: GameState;
-  requireReasoning: boolean;
-  busy: boolean;
   onSubmit: (input: PlayerInput, reasoning: string) => void;
 };
 
-export function ActionPanel({ game, requireReasoning, busy, onSubmit }: Props) {
+export function ActionPanel({ game, onSubmit }: Props) {
   const seat = game.heroSeat;
   const legal = legalActions(game, seat);
   const hero = game.players[seat];
@@ -55,11 +53,8 @@ export function ActionPanel({ game, requireReasoning, busy, onSubmit }: Props) {
 
   const amountCents = toCents(parseFloat(amount.replace(',', '.')) || 0);
   const amountOk = range ? amountCents >= range.min && amountCents <= range.max : false;
-  const needText = requireReasoning && reasoning.trim().length < 3;
-  const disabled = busy || needText;
 
   const submit = (input: PlayerInput) => {
-    if (disabled) return;
     onSubmit(input, reasoning.trim());
   };
   const betOrRaise = () => {
@@ -72,7 +67,7 @@ export function ActionPanel({ game, requireReasoning, busy, onSubmit }: Props) {
     <section className="action-panel" aria-label="Your decision">
       <p className="situation">{situationLine(game, seat)}</p>
       <label className="reasoning-label" htmlFor="reasoning">
-        Your reasoning{requireReasoning ? '' : ' (optional)'}
+        Your reasoning (optional)
       </label>
       <textarea
         id="reasoning"
@@ -84,28 +79,28 @@ export function ActionPanel({ game, requireReasoning, busy, onSubmit }: Props) {
       />
       <div className="actions">
         {legal.fold ? (
-          <button className="btn fold" disabled={disabled} onClick={() => submit({ type: 'fold' })}>
+          <button className="btn fold" onClick={() => submit({ type: 'fold' })}>
             Fold
           </button>
         ) : null}
         {legal.check ? (
-          <button className="btn check" disabled={disabled} onClick={() => submit({ type: 'check' })}>
+          <button className="btn check" onClick={() => submit({ type: 'check' })}>
             Check
           </button>
         ) : null}
         {legal.call !== null ? (
-          <button className="btn call" disabled={disabled} onClick={() => submit({ type: 'call' })}>
+          <button className="btn call" onClick={() => submit({ type: 'call' })}>
             Call {fmt(legal.call)}
             {legal.call >= hero.stack ? ' (all-in)' : ''}
           </button>
         ) : null}
         {range ? (
-          <button className="btn raise" disabled={disabled || !amountOk} onClick={betOrRaise}>
+          <button className="btn raise" disabled={!amountOk} onClick={betOrRaise}>
             {isRaise ? `Raise to ${fmt(amountCents)}` : `Bet ${fmt(amountCents)}`}
           </button>
         ) : null}
         {legal.allin > 0 && (legal.call === null || legal.allin > legal.call) ? (
-          <button className="btn allin" disabled={disabled} onClick={() => submit({ type: 'allin' })}>
+          <button className="btn allin" onClick={() => submit({ type: 'allin' })}>
             All-in {fmt(legal.allin)}
           </button>
         ) : null}
@@ -135,7 +130,6 @@ export function ActionPanel({ game, requireReasoning, busy, onSubmit }: Props) {
           </span>
         </div>
       ) : null}
-      {needText ? <p className="hint-line">Write your reasoning to unlock the action buttons.</p> : null}
     </section>
   );
 }

@@ -6,29 +6,29 @@ import { evaluate } from '../engine/evaluator';
 import { drawInfo } from '../bots/handStrength';
 import { recommend, situationFromState } from '../strategy/preflopAdvisor';
 import { leaksText, rulebookText } from '../strategy/ranges';
-import type { HandRecord, Review, Stats } from '../types';
+import type { CoachReply, HandRecord, Review, Stats } from '../types';
 
 function intro(bb: number, sb: number, stackBB: number) {
   return `You are a poker coach for a beginner playing 6-max no-limit hold'em cash games at ${fmt(sb)}/${fmt(bb)} with ${stackBB} BB stacks. You grade the student's decisions against the TAG rule set below. Be direct and concise. Lead with the verdict. Correct the reasoning explicitly, not only the action. Use short bullet points and small tables. Quote the student's numbers next to the exact numbers when they differ. Never reveal villain cards mid-hand. If the student picks an action that is not available, say so and ask again. If the student misreads their own hand or the board, correct that first. Count to five before calling anything a straight or a flush.
 A right action for a wrong reason gets action "acceptable" or reasoning "partly" plus a correction. The hand continues with the student's action even when it is wrong, so note the better line. Tone: direct, no praise padding, never write "genuinely" or "honestly".`;
 }
 
-function ruleSet() {
+function ruleSet(part: 'all' | 'preflop' | 'postflop' = 'all') {
   return `=== RULE SET ===
-${rulebookText()}
+${rulebookText(part)}
 
 === LEAK CODES ===
-${leaksText()}`;
+${leaksText(part)}`;
 }
 
 const OUTPUT_FORMAT = `=== OUTPUT FORMAT ===
 Respond ONLY with one JSON object:
 {
   "action_verdict": "correct" | "acceptable" | "wrong",
-  "reasoning_verdict": "correct" | "partly" | "off",
+  "reasoning_verdict": "correct" | "partly" | "off" | "none"  ("none" only when the student gave no reasoning),
   "headline": "one line, verdict + action first, e.g. \\"Correct: call. Price 28%, you have 8 outs (32% over two cards).\\"",
   "better_play": "e.g. \\"Bet €0.10 (1/3 pot)\\"" or null when the student's action is best,
-  "explanation": "2–6 short Markdown bullet lines starting with '- '. Correct the reasoning explicitly: what was right, what to change, and the rule number it comes from. When the student's numbers differ from the exact ones, include a small Markdown table: | | You | Exact |.",
+  "explanation": "2–4 short Markdown bullet lines starting with '- '. Correct the reasoning explicitly: what was right, what to change, and the rule number it comes from. When the student's numbers differ from the exact ones, include a small Markdown table: | | You | Exact |.",
   "numbers": { "price_pct": number|null, "outs": number|null, "hit_pct_next_card": number|null, "hit_pct_two_cards": number|null } or null when no math is involved,
   "leaks": ["CODE", ...]  (leak codes that apply to this decision; [] if none)
 }
@@ -92,19 +92,42 @@ export function handStateJson(s: GameState, handNumber: number): string {
   return JSON.stringify(state, null, 1);
 }
 
-export function decisionPrompt(o: { sb: number; bb: number; stackBB: number; handState: string; reasoning: string; actionText: string }) {
+export function decisionPrompt(o: {
+  sb: number;
+  bb: number;
+  stackBB: number;
+  street: string;
+  handState: string;
+  reasoning: string;
+  actionText: string;
+  quick?: CoachReply;
+}) {
+  const part = o.street === 'preflop' ? 'preflop' : 'postflop';
+  const reasoning = o.reasoning.trim();
+  const student = reasoning
+    ? `Reasoning: "${reasoning}"
+Action: ${o.actionText}`
+    : `Reasoning: (none — the student acted without explaining)
+Action: ${o.actionText}
+
+The student did not explain the decision. That is allowed and must not be penalised: set "reasoning_verdict" to "none", grade the action, and explain WHY it is right or wrong — the hand, the rule number, the numbers (price, outs, combos) and the better line if there is one.`;
+  const engine = o.quick
+    ? `
+=== ENGINE GRADE (instant rule-based check, already shown to the student; confirm or correct it) ===
+${JSON.stringify({ action_verdict: o.quick.action_verdict, headline: o.quick.headline, better_play: o.quick.better_play, leaks: o.quick.leaks })}
+`
+    : '';
   return `${intro(o.bb, o.sb, o.stackBB)}
 
-${ruleSet()}
+${ruleSet(part)}
 
 ${OUTPUT_FORMAT}
 
 === HAND STATE ===
 ${o.handState}
-
+${engine}
 === STUDENT ===
-Reasoning: "${o.reasoning.trim() || '(no reasoning given)'}"
-Action: ${o.actionText}`;
+${student}`;
 }
 
 function handSummary(h: HandRecord, revealAll: boolean) {
@@ -128,9 +151,12 @@ function handSummary(h: HandRecord, revealAll: boolean) {
       situation: d.situation,
       reasoning: d.reasoning,
       action: d.actionText,
-      coach: d.coach
-        ? { action_verdict: d.coach.action_verdict, reasoning_verdict: d.coach.reasoning_verdict, headline: d.coach.headline, leaks: d.coach.leaks }
-        : 'coach unavailable at the time — grade this decision yourself',
+      coach: (() => {
+        const g = d.coach ?? d.quick;
+        return g
+          ? { source: g.source ?? 'coach', action_verdict: g.action_verdict, reasoning_verdict: g.reasoning_verdict, headline: g.headline, leaks: g.leaks }
+          : 'not graded — grade this decision yourself';
+      })(),
     })),
   };
 }

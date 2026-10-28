@@ -147,8 +147,9 @@ export const TIER_RULES: Record<Tier, string> = {
 
 const j = (a: string[]) => a.join(' ');
 
-export function rulebookText(): string {
-  return `6.1 OPENING CHART (nobody has raised yet)
+/** Rule book text for the coach prompt. `part` keeps only what a preflop or a postflop decision needs. */
+export function rulebookText(part: 'all' | 'preflop' | 'postflop' = 'all'): string {
+  const preflop = `6.1 OPENING CHART (nobody has raised yet)
 At a 6-max table the first seat (UTG) plays the blue range.
 - UTG, HJ: GREEN + BLUE
 - CO, BTN: GREEN + BLUE + ORANGE
@@ -171,13 +172,14 @@ Big blind: can call wider than the chart (any red/yellow/black hand vs any raise
 - 3-bet vs early raiser (UTG/HJ): ${j(THREE_BET.vsEarly)} — size 3× the raise in position; 4× from the blinds.
 - 3-bet vs late raiser (CO/BTN): ${j(THREE_BET.vsLate)} — same sizes.
 - Facing a 3-bet after you raised: AA KK → 4-bet · QQ AK → 4-bet or call · JJ TT AQs KQs → call in position only · everything else → fold. 4-bet = 2.2–2.5× the 3-bet.
-- Facing a 4-bet after you 3-bet: AA KK → 5-bet / all-in · QQ AK → call · rest → fold.
-
-6.4 SIZES
-${SIZES_TEXT}
-
-6.5 POSTFLOP RULES OF THUMB
+- Facing a 4-bet after you 3-bet: AA KK → 5-bet / all-in · QQ AK → call · rest → fold.`;
+  const sizes = `6.4 SIZES
+${SIZES_TEXT}`;
+  const postflop = `6.5 POSTFLOP RULES OF THUMB
 ${POSTFLOP_TEXT}`;
+  if (part === 'preflop') return `${preflop}\n\n${sizes}`;
+  if (part === 'postflop') return `${sizes}\n\n${postflop}`;
+  return `${preflop}\n\n${sizes}\n\n${postflop}`;
 }
 
 export const LEAKS: { code: string; text: string }[] = [
@@ -202,6 +204,10 @@ export const LEAKS: { code: string; text: string }[] = [
   { code: 'STACKOFF', text: "Putting a stack in with one pair after the flop against a passive player's raise" },
 ];
 
-export function leaksText(): string {
-  return LEAKS.map((l) => `${l.code}: ${l.text}`).join('\n');
+export function leaksText(part: 'all' | 'preflop' | 'postflop' = 'all'): string {
+  const keep = (code: string) =>
+    part === 'all' || code.startsWith('READ') || (part === 'preflop' ? code.startsWith('PF-') : !code.startsWith('PF-'));
+  return LEAKS.filter((l) => keep(l.code))
+    .map((l) => `${l.code}: ${l.text}`)
+    .join('\n');
 }

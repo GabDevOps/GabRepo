@@ -104,7 +104,7 @@ Para que el coach no se equivoque leyendo la mano, el prompt incluye datos calcu
 
 ## 8. Verificación
 
-- `npm test`: 21 tests (categorías y orden de manos, botes con all-in y botes secundarios, devolución de apuestas, min-raise y acciones legales, 169 manos del chart, recomendaciones preflop, 300 manos solo de bots sin acciones ilegales y con las fichas cuadradas, prompt y respuesta del coach).
+- `npm test`: 28 tests (repartidor de manos interesantes, corrección instantánea, categorías y orden de manos, botes con all-in y botes secundarios, devolución de apuestas, min-raise y acciones legales, 169 manos del chart, recomendaciones preflop, 300 manos solo de bots sin acciones ilegales y con las fichas cuadradas, prompt y respuesta del coach).
 - Prueba en Chromium sobre la página compilada, fuera de claude.ai: 12 manos y 40 decisiones sin errores, chart, drill, progreso y pantalla de móvil sin scroll horizontal. Fuera de claude.ai el coach sale como "no disponible", lo que comprueba el modo sin conexión.
 - Pendiente de comprobar dentro de claude.ai: las respuestas reales del coach y que el historial se conserva al recargar.
 
@@ -113,7 +113,16 @@ Para que el coach no se equivoque leyendo la mano, el prompt incluye datos calcu
 - App publicada como Artifact en claude.ai (privada).
 - Código en la rama `claude/poker-trainer` de `GabDevOps/GabRepo`, sin fusionar en `master`.
 
-## 10. Posibles mejoras
+## 10. Cambios v2 (tras la primera prueba)
+
+| Problema | Solución |
+|---|---|
+| Había que escribir el razonamiento para poder pulsar un botón | El razonamiento es opcional. Sin él, el coach puntúa la jugada y explica igualmente por qué es buena o mala (regla, números, mejor línea). |
+| El juego parecía pararse tras un fold o un raise preflop | La mesa ya no espera al coach: la acción se aplica al instante y los bots siguen. Tras un fold, la siguiente mano se reparte sola en ~1 s; la nota del fold queda visible como "mano anterior" en el panel del coach. Las llamadas al coach tienen un límite de 20 s. |
+| Demasiadas manos sin decisión (72o en UTG) | Nuevo repartidor (`src/engine/dealer.ts`): simula a los bots hasta el turno del jugador y vuelve a repartir si es un walk o un fold obvio. ~75 % de las manos son para jugar y ~25 % folds dudosos (KJo UTG, A9s contra subida de HJ…). Se puede desactivar en Ajustes ("Interesting hands only"). |
+| El coach tardaba demasiado | Corrección instantánea en el navegador (`src/coach/quickCheck.ts`): preflop exacta contra el libro de reglas; postflop con precio, outs, % y reglas principales (c-bet, slowplay, odds, SPR). El comentario de Claude llega después, en segundo plano, con el modelo rápido y un prompt más corto (solo las reglas de la calle en juego), y sustituye a la corrección instantánea en la tarjeta. |
+
+## 11. Posibles mejoras
 
 - Ver manos antiguas del historial con su scorecard dentro de la app.
 - Elegir el estilo de los rivales para practicar contra un tipo concreto.
