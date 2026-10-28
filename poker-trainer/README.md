@@ -7,6 +7,7 @@ street, writes a scorecard at the end of each hand and a progress review every N
 It is built to run as a **claude.ai Artifact**: the build produces one self-contained HTML page.
 
 The full plan of the app (goals, architecture, decisions, verification) is in [PLAN.md](PLAN.md) (Spanish).
+What each branch of this repo is, and its status: [BRANCHES.md](../BRANCHES.md).
 
 ## How it runs inside claude.ai
 

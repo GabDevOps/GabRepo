@@ -1,6 +1,6 @@
 # Poker Trainer — Plan de la app
 
-Este documento recoge el plan con el que se construyó la app: qué se quería, cómo se ha resuelto y en qué se aparta de la especificación original. El README técnico (cómo instalar, probar y compilar) está en [README.md](README.md).
+Este documento recoge el plan con el que se construyó la app: qué se quería, cómo se ha resuelto y en qué se aparta de la especificación original. El README técnico (cómo instalar, probar y compilar) está en [README.md](README.md). Qué es cada rama del repo y su estado: [BRANCHES.md](../BRANCHES.md).
 
 ## 1. Objetivo
 
